@@ -63,17 +63,17 @@ export const TicketStub: React.FC<TicketStubProps> = ({
   const formattedDate = format(new Date(ticket.date), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR });
   const purchaseDateFormatted = format(ticket.purchaseDate, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
 
-  // Gera o QR como PNG data URL e renderiza como <img>.
-  // html2canvas captura <img> perfeitamente; canvases filhos têm
-  // problemas conhecidos quando o pai está tainted pelas bandeiras CDN.
-  const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  // Renderiza o QR como GRID DE DIVS (cada célula = div com background).
+  // Divs são capturados perfeitamente pelo html2canvas em qualquer cenário —
+  // sem canvas tainted, sem SVG quirky, sem CORS. À prova de balas.
+  const [qrMatrix, setQrMatrix] = useState<{ data: Uint8Array; size: number } | null>(null);
   useEffect(() => {
-    QRCode.toDataURL(qrUrl, {
-      width: 280,
-      margin: 0,
-      errorCorrectionLevel: 'M',
-      color: { dark: FIFA_RED, light: '#FFFFFF' },
-    }).then(setQrDataUrl).catch(() => setQrDataUrl(''));
+    try {
+      const qr = QRCode.create(qrUrl, { errorCorrectionLevel: 'M' });
+      setQrMatrix({ data: qr.modules.data as unknown as Uint8Array, size: qr.modules.size });
+    } catch {
+      setQrMatrix(null);
+    }
   }, [qrUrl]);
 
   return (
@@ -392,14 +392,40 @@ export const TicketStub: React.FC<TicketStubProps> = ({
               lineHeight: 0,
             }}
           >
-            {qrDataUrl ? (
-              <img
-                src={qrDataUrl}
-                alt="QR Code"
-                width={140}
-                height={140}
-                style={{ display: 'block', width: 140, height: 140 }}
-              />
+            {qrMatrix ? (
+              <div
+                style={{
+                  width: 140,
+                  height: 140,
+                  position: 'relative',
+                  background: 'white',
+                }}
+              >
+                {(() => {
+                  const cells: React.ReactElement[] = [];
+                  const cellSize = 140 / qrMatrix.size;
+                  for (let row = 0; row < qrMatrix.size; row++) {
+                    for (let col = 0; col < qrMatrix.size; col++) {
+                      if (qrMatrix.data[row * qrMatrix.size + col]) {
+                        cells.push(
+                          <div
+                            key={`${row}-${col}`}
+                            style={{
+                              position: 'absolute',
+                              left: col * cellSize,
+                              top: row * cellSize,
+                              width: cellSize + 0.5,
+                              height: cellSize + 0.5,
+                              background: FIFA_RED,
+                            }}
+                          />
+                        );
+                      }
+                    }
+                  }
+                  return cells;
+                })()}
+              </div>
             ) : (
               <div style={{ width: 140, height: 140, background: '#f4f4f4' }} />
             )}
